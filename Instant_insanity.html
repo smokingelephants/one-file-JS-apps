@@ -1,0 +1,430 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Instant Insanity – 4 Cube Puzzle</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #111;
+      color: #eee;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    header {
+      padding: 0.5rem 1rem 0;
+      text-align: center;
+    }
+    header h1 {
+      font-size: 1.1rem;
+      margin: 0.3rem 0;
+    }
+    header p {
+      font-size: 0.85rem;
+      margin: 0.2rem 0;
+      color: #bbb;
+    }
+    #gameContainer {
+      width: 100%;
+      max-width: 800px;
+      padding: 0.5rem;
+      box-sizing: border-box;
+    }
+    #gameCanvas {
+      width: 100%;
+      height: auto;
+      background: #000;
+      border: 1px solid #333;
+      border-radius: 4px;
+      touch-action: manipulation;
+    }
+    #controls {
+      margin-top: 0.4rem;
+      display: flex;
+      gap: 0.4rem;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    button {
+      border-radius: 4px;
+      border: none;
+      padding: 0.4rem 0.8rem;
+      font-size: 0.9rem;
+      background: #333;
+      color: #eee;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #444;
+    }
+    #status {
+      margin-top: 0.4rem;
+      font-size: 0.9rem;
+      text-align: center;
+      min-height: 1.4em;
+    }
+    #legend {
+      margin-top: 0.3rem;
+      font-size: 0.8rem;
+      color: #aaa;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Instant Insanity – 4 Cubes</h1>
+    <p>Tap a cube to change its orientation. Try to get all four colors on each long side (front, back, left, right).</p>
+  </header>
+
+
+  <div id="gameContainer">
+    <canvas id="gameCanvas"></canvas>
+    <div id="controls">
+      <button id="checkBtn">Check Solution</button>
+      <button id="resetBtn">Reset / Scramble</button>
+    </div>
+    <div id="status"></div>
+    <div id="legend">
+      Colors: Red, Blue, Green, Yellow. Goal: on each of the four long sides of the row, all four colors appear exactly once.
+    </div>
+  </div>
+
+
+  <script>
+    // ======= Puzzle data and cube orientation logic =======
+
+
+    // We use 4 colors.
+    const COLORS = ["red", "blue", "green", "yellow"];
+
+
+    // Each cube has 6 faces: U, D, F, B, L, R
+    // Define a base configuration for each cube that guarantees at least one solvable arrangement.
+    // These are designed so that in one particular orientation:
+    // Front: [R, B, G, Y], Back: [B, G, Y, R], Left: [G, Y, R, B], Right: [Y, R, B, G]
+    const baseCubes = [
+      { U: "red",    D: "blue",   F: "red",   B: "blue",   L: "green",  R: "yellow" },
+      { U: "blue",   D: "green",  F: "blue",  B: "green",  L: "yellow", R: "red"    },
+      { U: "green",  D: "yellow", F: "green", B: "yellow", L: "red",    R: "blue"   },
+      { U: "yellow", D: "red",    F: "yellow",B: "red",    L: "blue",   R: "green"  }
+    ];
+
+
+    // Rotate around X axis (pitch): tipping cube forward
+    function rotateX(o) {
+      return {
+        U: o.B,
+        B: o.D,
+        D: o.F,
+        F: o.U,
+        L: o.L,
+        R: o.R
+      };
+    }
+
+
+    // Rotate around Y axis (yaw): turning cube left/right
+    function rotateY(o) {
+      return {
+        U: o.U,
+        D: o.D,
+        F: o.L,
+        L: o.B,
+        B: o.R,
+        R: o.F
+      };
+    }
+
+
+    // Rotate around Z axis (roll): spinning cube around front-back axis
+    function rotateZ(o) {
+      return {
+        U: o.R,
+        R: o.D,
+        D: o.L,
+        L: o.U,
+        F: o.F,
+        B: o.B
+      };
+    }
+
+
+    // Generate all 24 unique orientations of a cube using BFS over rotations
+    function generateOrientations(base) {
+      const seen = new Set();
+      const queue = [];
+      const orientations = [];
+
+
+      function key(o) {
+        return [o.U, o.D, o.F, o.B, o.L, o.R].join("|");
+      }
+
+
+      queue.push(base);
+      seen.add(key(base));
+      orientations.push(base);
+
+
+      while (queue.length > 0) {
+        const current = queue.shift();
+        const nexts = [rotateX(current), rotateY(current), rotateZ(current)];
+        for (const n of nexts) {
+          const k = key(n);
+          if (!seen.has(k)) {
+            seen.add(k);
+            queue.push(n);
+            orientations.push(n);
+          }
+        }
+      }
+      return orientations; // should be 24
+    }
+
+
+    const cubeOrientations = baseCubes.map(generateOrientations);
+
+
+    // Each cube state: { index, orientationIndex }
+    let cubes = baseCubes.map((_, i) => ({
+      index: i,
+      orientationIndex: 0
+    }));
+
+
+    // Randomize orientations to start
+    function scrambleCubes() {
+      cubes.forEach(c => {
+        const len = cubeOrientations[c.index].length;
+        c.orientationIndex = Math.floor(Math.random() * len);
+      });
+    }
+
+
+    // ======= Canvas and drawing =======
+
+
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+
+    let cubeDrawInfo = []; // {x, y, size} per cube (front face rect) for hit detection
+
+
+    function resizeCanvas() {
+      const container = document.getElementById("gameContainer");
+      const width = container.clientWidth;
+      canvas.width = width;
+      // height enough for cubes + text area
+      canvas.height = Math.max(260, Math.floor(width * 0.45));
+      draw();
+    }
+
+
+    window.addEventListener("resize", resizeCanvas);
+
+
+    function drawCube(x, y, size, orientation) {
+      const { U, F, R } = orientation;
+      // Simple isometric-ish offsets
+      const dx = size * 0.3;
+      const dy = size * 0.2;
+
+
+      ctx.lineWidth = 2;
+
+
+      // Top face (U)
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + dx, y - dy);
+      ctx.lineTo(x + dx + size, y - dy);
+      ctx.lineTo(x + size, y);
+      ctx.closePath();
+      ctx.fillStyle = U;
+      ctx.fill();
+      ctx.strokeStyle = "#000";
+      ctx.stroke();
+
+
+      // Right face (R)
+      ctx.beginPath();
+      ctx.moveTo(x + size, y);
+      ctx.lineTo(x + size + dx, y - dy);
+      ctx.lineTo(x + size + dx, y - dy + size);
+      ctx.lineTo(x + size, y + size);
+      ctx.closePath();
+      ctx.fillStyle = R;
+      ctx.fill();
+      ctx.stroke();
+
+
+      // Front face (F)
+      ctx.beginPath();
+      ctx.rect(x, y, size, size);
+      ctx.fillStyle = F;
+      ctx.fill();
+      ctx.stroke();
+
+
+      // Outline stronger
+      ctx.strokeStyle = "#111";
+      ctx.strokeRect(x, y, size, size);
+    }
+
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      cubeDrawInfo = [];
+
+
+      const numCubes = cubes.length;
+      const margin = 16;
+      const totalMargin = margin * (numCubes + 1);
+      const availableWidth = canvas.width - totalMargin;
+      const cubeSize = Math.min(80, availableWidth / numCubes);
+      const startX = (canvas.width - (cubeSize * numCubes + margin * (numCubes - 1))) / 2;
+      const baseY = canvas.height / 2 - cubeSize / 2 + 10;
+
+
+      for (let i = 0; i < numCubes; i++) {
+        const c = cubes[i];
+        const ori = cubeOrientations[c.index][c.orientationIndex];
+        const x = startX + i * (cubeSize + margin);
+        const y = baseY;
+        drawCube(x, y, cubeSize, ori);
+        cubeDrawInfo.push({ x, y, size: cubeSize, cubeIndex: i });
+      }
+
+
+      // Labels under cubes
+      ctx.font = "14px system-ui";
+      ctx.fillStyle = "#eee";
+      ctx.textAlign = "center";
+      for (let i = 0; i < numCubes; i++) {
+        const info = cubeDrawInfo[i];
+        ctx.fillText("Cube " + (i + 1), info.x + info.size / 2, info.y + info.size + 18);
+      }
+    }
+
+
+    // ======= Interaction =======
+
+
+    function getCubeAtPosition(px, py) {
+      // Use front face rect for hit detection
+      for (const info of cubeDrawInfo) {
+        if (
+          px >= info.x &&
+          px <= info.x + info.size &&
+          py >= info.y &&
+          py <= info.y + info.size
+        ) {
+          return info.cubeIndex;
+        }
+      }
+      return null;
+    }
+
+
+    canvas.addEventListener("click", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const idx = getCubeAtPosition(x, y);
+      if (idx !== null) {
+        const c = cubes[idx];
+        const len = cubeOrientations[c.index].length;
+        c.orientationIndex = (c.orientationIndex + 1) % len; // cycle through all 24 orientations
+        setStatus("Rotated cube " + (idx + 1) + ".");
+        draw();
+      }
+    });
+
+
+    // ======= Solution checking =======
+
+
+    function getCurrentFaces() {
+      // Return arrays of faces for each side: F, B, L, R
+      const F = [];
+      const B = [];
+      const L = [];
+      const R = [];
+      cubes.forEach((c) => {
+        const o = cubeOrientations[c.index][c.orientationIndex];
+        F.push(o.F);
+        B.push(o.B);
+        L.push(o.L);
+        R.push(o.R);
+      });
+      return { F, B, L, R };
+    }
+
+
+    function sideHasAllColors(sideArr) {
+      if (sideArr.length !== COLORS.length) return false;
+      const counts = {};
+      for (const col of sideArr) {
+        counts[col] = (counts[col] || 0) + 1;
+      }
+      for (const col of COLORS) {
+        if (counts[col] !== 1) return false;
+      }
+      return true;
+    }
+
+
+    function checkSolution() {
+      const { F, B, L, R } = getCurrentFaces();
+      const okF = sideHasAllColors(F);
+      const okB = sideHasAllColors(B);
+      const okL = sideHasAllColors(L);
+      const okR = sideHasAllColors(R);
+
+
+      if (okF && okB && okL && okR) {
+        setStatus("🎉 Solved! Each side has all four colors exactly once.", true);
+      } else {
+        let msg = "Not yet. ";
+        msg += `Front OK? ${okF ? "✔" : "✘"}, `;
+        msg += `Back OK? ${okB ? "✔" : "✘"}, `;
+        msg += `Left OK? ${okL ? "✔" : "✘"}, `;
+        msg += `Right OK? ${okR ? "✔" : "✘"}.`;
+        setStatus(msg);
+      }
+    }
+
+
+    function setStatus(msg, success = false) {
+      const statusEl = document.getElementById("status");
+      statusEl.textContent = msg;
+      statusEl.style.color = success ? "#72ff72" : "#eee";
+    }
+
+
+    document.getElementById("checkBtn").addEventListener("click", checkSolution);
+
+
+    document.getElementById("resetBtn").addEventListener("click", () => {
+      scrambleCubes();
+      setStatus("Scrambled cubes. Try again!");
+      draw();
+    });
+
+
+    // ======= Init =======
+
+
+    scrambleCubes();
+    resizeCanvas();
+    setStatus("Tap a cube to rotate it. Then press 'Check Solution'.");
+
+
+  </script>
+</body>
+</html>
