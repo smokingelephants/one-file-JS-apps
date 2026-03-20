@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Mirror Ricochet Arena – Autoaim</title>
+<style>
+  :root {
+    --bg1: #06121f;
+    --bg2: #0b2238;
+    --panel: rgba(9,17,31,0.56);
+    --panelStrong: rgba(8,15,27,0.84);
+    --border: rgba(182,242,255,0.16);
+    --text: #e7f7ff;
+    --muted: #9db2c5;
+    --accent: #79f0ff;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden; color: var(--text);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background:
+      radial-gradient(circle at 18% 20%, rgba(40,126,186,0.24), transparent 28%),
+      radial-gradient(circle at 80% 16%, rgba(121,240,255,0.11), transparent 25%),
+      radial-gradient(circle at 50% 90%, rgba(67,90,171,0.16), transparent 34%),
+      linear-gradient(180deg, var(--bg2), var(--bg1));
+    touch-action: manipulation;
+  }
+  #game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+  .ui { position: fixed; inset: 0; pointer-events: none; }
+  .panel {
+    pointer-events: auto;
+    backdrop-filter: blur(12px);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    box-shadow: 0 14px 40px rgba(0,0,0,0.22), inset 0 0 0 1px rgba(255,255,255,0.03);
+  }
+  .topBar {
+    position: fixed; top: 12px; left: 12px; right: 12px;
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;
+  }
+  .miniHud {
+    padding: 10px 12px; min-width: 210px; max-width: 62vw;
+  }
+  .titleRow { display: flex; align-items: center; gap: 8px; }
+  .titleRow .dot { width: 10px; height: 10px; border-radius: 999px; background: var(--accent); box-shadow: 0 0 14px rgba(121,240,255,0.8); }
+  .titleRow b { font-size: 14px; letter-spacing: 0.02em; }
+  .sub { margin-top: 5px; font-size: 12px; color: var(--muted); line-height: 1.3; }
+  .quickStats { margin-top: 8px; display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; }
+  .quickStats span { color: var(--muted); }
+  .quickStats b { color: var(--text); }
+  .topBtns { display: flex; gap: 8px; }
+  button {
+    appearance: none; border: 1px solid rgba(255,255,255,0.1);
+    background: linear-gradient(180deg, rgba(121,240,255,0.18), rgba(121,240,255,0.05));
+    color: var(--text); padding: 10px 13px; font-weight: 700; border-radius: 14px; cursor: pointer;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.18);
+  }
+  button:hover { filter: brightness(1.08); }
+  .smallBtn { padding: 9px 12px; font-size: 13px; }
+  .bottomBar {
+    position: fixed; left: 12px; right: 12px; bottom: 12px;
+    display: flex; justify-content: space-between; align-items: end; gap: 10px;
+  }
+  .controls { display: flex; gap: 8px; align-items: center; pointer-events: auto; }
+  .legend { padding: 10px 12px; max-width: min(560px, 66vw); font-size: 12px; line-height: 1.35; color: var(--muted); }
+  .chargeWrap { min-width: 170px; }
+  .chargeLabel { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+  .bar { height: 8px; border-radius: 999px; background: rgba(255,255,255,0.06); overflow: hidden; }
+  .fill { height: 100%; width: 0%; border-radius: inherit; background: linear-gradient(90deg, #7cf3ff, #ffe28c); box-shadow: 0 0 16px rgba(121,240,255,0.35); }
+  .statsPanel {
+    position: fixed; top: 68px; right: 12px; width: min(400px, calc(100vw - 24px));
+    padding: 12px; display: none; pointer-events: auto;
+  }
+  .statsPanel.open { display: block; }
+  .statsHead { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .statsHead b { font-size: 14px; }
+  .grid { margin-top: 10px; display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .pbox { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); border-radius: 14px; padding: 9px 10px; }
+  .pname { font-size: 12px; font-weight: 700; display: flex; justify-content: space-between; gap: 8px; }
+  .pmeta { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .overlay {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 18px;
+    background: radial-gradient(circle at center, rgba(4,8,17,0.2), rgba(4,8,17,0.58));
+  }
+  .modal { max-width: 620px; padding: 18px; }
+  .modal h1 { margin: 0 0 10px; font-size: clamp(24px, 5vw, 38px); }
+  .modal p { margin: 0 0 12px; color: var(--muted); line-height: 1.45; }
+  .modal .bullets { display: grid; gap: 8px; margin: 12px 0 16px; }
+  .modal .bullets div { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); padding: 10px 12px; border-radius: 14px; }
+  .modalBtns { display: flex; gap: 10px; flex-wrap: wrap; }
+  @media (max-width: 760px) {
+    .miniHud { max-width: 68vw; }
+    .legend { max-width: 58vw; }
+    .bottomBar { align-items: stretch; flex-direction: column-reverse; }
+    .legend { max-width: 100%; }
+    .controls { flex-wrap: wrap; }
+    .statsPanel { top: 74px; }
+  }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div class="ui">
+  <div class="topBar">
+    <div class="panel miniHud">
+      <div class="titleRow"><span class="dot"></span><b>Mirror Ricochet Arena</b></div>
+      <div class="sub">Autoaim mode. Direct hits are disabled: your turret only scores through reflection routes. More reflections mean more damage.</div>
+      <div class="quickStats" id="quickStats"></div>
+    </div>
+    <div class="topBtns">
+      <button class="smallBtn" id="statsBtn">Show Stats</button>
+    </div>
+  </div>
+
+  <div class="panel statsPanel" id="statsPanel">
+    <div class="statsHead">
+      <b>Round Stats</b>
+      <button class="smallBtn" id="closeStatsBtn">Close</button>
+    </div>
+    <div class="grid" id="playerGrid"></div>
+  </div>
+
+  <div class="bottomBar">
+    <div class="controls">
+      <button id="pauseBtn">Pause</button>
+      <button id="restartBtn">New Round</button>
+      <div class="panel miniHud chargeWrap">
+        <div class="chargeLabel" id="chargeLabel">Charge 0%</div>
+        <div class="bar"><div class="fill" id="chargeFill"></div></div>
+      </div>
+    </div>
+    <div class="panel legend" id="legendText">Direct hits are disabled. The turret previews reflected kill lines only. More reflections power up damage, and some mirror impacts shatter shots into fragments.</div>
+  </div>
+
+  <div class="overlay" id="overlay">
+    <div class="panel modal">
+      <h1>Autoaim Mirror Arena</h1>
+      <p>This version focuses on feel: no movement modes, no auto-fire. Your turret continuously scans for the strongest live path to a target using the current mirror layout, including ricochet opportunities.</p>
+      <div class="bullets">
+        <div><b>Reflection preview</b><br>Turrets prefer the strongest reflected path they can currently find through mirrors.</div>
+        <div><b>Manual timing</b><br>Tap or press Space only when you like the current lock and your charge is high enough.</div>
+        <div><b>Shot shatter</b><br>Some mirror hits split a projectile into reflected, transmitted, and scattered weaker fragments.</div>
+      </div>
+      <div class="modalBtns">
+        <button id="startBtn">Start</button>
+        <button id="dismissBtn">Dismiss Overlay</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const overlay = document.getElementById('overlay');
+  const quickStats = document.getElementById('quickStats');
+  const playerGrid = document.getElementById('playerGrid');
+  const statsPanel = document.getElementById('statsPanel');
+  const statsBtn = document.getElementById('statsBtn');
+  const closeStatsBtn = document.getElementById('closeStatsBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const restartBtn = document.getElementById('restartBtn');
+  const startBtn = document.getElementById('startBtn');
+  const dismissBtn = document.getElementById('dismissBtn');
+  const chargeFill = document.getElementById('chargeFill');
+  const chargeLabel = document.getElementById('chargeLabel');
+  const legendText = document.getElementById('legendText');
+
+  const DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+  let W = 0, H = 0, lastT = 0;
+  let paused = false, started = false;
+  let round = 0, message = '', messageT = 0, winnerTimer = 0;
+
+  const HITS_TO_KILL = 5;
+  const PLAYER_COUNT = 6;
+  const MIRROR_COUNT = 8;
+  const PLAYER_RADIUS = 15;
+  const MAX_BOUNCES = 5;
+  const ARENA_PAD = 34;
+  const palette = ['#7cf3ff', '#ff82b2', '#ffe28c', '#99ffaf', '#b69bff', '#ffb86e'];
+  const state = { players: [], mirrors: [], roads: [], shots: [], sparks: [], ripples: [], stars: [] };
+
+  function rand(a, b) { return a + Math.random() * (b - a); }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function angleToVec(a) { return { x: Math.cos(a), y: Math.sin(a) }; }
+  function dist2(ax, ay, bx, by) { const dx = ax - bx, dy = ay - by; return dx * dx + dy * dy; }
+  function norm(x, y) { const m = Math.hypot(x, y) || 1; return { x: x / m, y: y / m }; }
+  function reflect(ix, iy, nx, ny) { const d = ix * nx + iy * ny; return { x: ix - 2 * d * nx, y: iy - 2 * d * ny }; }
+  function rotate(x, y, a) { const c = Math.cos(a), s = Math.sin(a); return { x: x * c - y * s, y: x * s + y * c }; }
+
+  function damageFromPath(energy, bounces) {
+    const scaled = 0.45 + 0.95 * energy + 0.8 * bounces;
+    return clamp(Math.round(scaled), 1, 5);
+  }
+  function previewSummary(lock) {
+    if (!lock || !lock.hit) return 'No reflected hit currently available';
+    return `${lock.bounces} bounce${lock.bounces === 1 ? '' : 's'} · ${lock.damage} dmg · ${lock.targetName}`;
+  }
+
+
+  function arena() {
+    return { left: ARENA_PAD, right: W - ARENA_PAD, top: 84, bottom: H - 92 };
+  }
+
+  function resize() {
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = Math.floor(W * DPR); canvas.height = Math.floor(H * DPR);
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    if (!state.stars.length) createStars();
+  }
+
+  function createStars() {
+    state.stars = Array.from({ length: 90 }, () => ({ x: Math.random() * W, y: Math.random() * H, r: Math.random() * 1.4 + 0.3, a: Math.random() * 6.28, tw: Math.random() * 0.8 + 0.3 }));
+  }
+
+  function createPlayers() {
+    const b = arena();
+    state.players = [];
+    const placed = [];
+    const minSep = PLAYER_RADIUS * 5.2;
+    for (let i = 0; i < PLAYER_COUNT; i++) {
+      let x = 0, y = 0, ok = false;
+      for (let tries = 0; tries < 500 && !ok; tries++) {
+        x = rand(b.left + 56, b.right - 56);
+        y = rand(b.top + 56, b.bottom - 56);
+        ok = true;
+        for (const q of placed) {
+          if (dist2(x, y, q.x, q.y) < minSep * minSep) { ok = false; break; }
+        }
+      }
+      if (!ok) {
+        const a = Math.random() * Math.PI * 2;
+        const rr = Math.min(b.right - b.left, b.bottom - b.top) * rand(0.12, 0.34);
+        x = (b.left + b.right) * 0.5 + Math.cos(a) * rr;
+        y = (b.top + b.bottom) * 0.52 + Math.sin(a) * rr;
+      }
+      placed.push({ x, y });
+      state.players.push({
+        id: i, name: i === 0 ? 'You' : 'NPC ' + i, color: palette[i], x, y,
+        radius: PLAYER_RADIUS, alive: true, hits: 0, kills: 0, shots: 0,
+        aim: rand(0, Math.PI * 2), aimVel: 0, pulse: Math.random() * 6.28,
+        lock: null, charge: i === 0 ? 0.65 : rand(0.45, 0.95), cooldown: rand(0.4, 1.1),
+        think: rand(0.05, 0.16), isHuman: i === 0
+      });
+    }
+  }
+
+  function roadLength(points) {
+    let total = 0;
+    for (let i = 0; i < points.length - 1; i++) total += Math.hypot(points[i + 1].x - points[i].x, points[i + 1].y - points[i].y);
+    return total;
+  }
+
+  function pointOnRoad(road, s) {
+    let d = ((s % road.length) + road.length) % road.length;
+    for (let i = 0; i < road.points.length - 1; i++) {
+      const a = road.points[i], b = road.points[i + 1];
+      const seg = Math.hypot(b.x - a.x, b.y - a.y);
+      if (d <= seg || i === road.points.length - 2) {
+        const t = seg < 1e-6 ? 0 : d / seg;
+        return {
+          x: a.x + (b.x - a.x) * t,
+          y: a.y + (b.y - a.y) * t,
+          angle: Math.atan2(b.y - a.y, b.x - a.x)
+        };
+      }
+      d -= seg;
+    }
+    const last = road.points[road.points.length - 1], prev = road.points[road.points.length - 2];
+    return { x: last.x, y: last.y, angle: Math.atan2(last.y - prev.y, last.x - prev.x) };
+  }
+
+  function createRoads() {
+    const b = arena();
+    const w = b.right - b.left, h = b.bottom - b.top;
+    const x = (u) => b.left + w * u;
+    const y = (v) => b.top + h * v;
+    const roads = [
+      [{x:x(0.06),y:y(0.18)},{x:x(0.20),y:y(0.10)},{x:x(0.34),y:y(0.23)},{x:x(0.48),y:y(0.14)},{x:x(0.62),y:y(0.28)},{x:x(0.77),y:y(0.18)},{x:x(0.93),y:y(0.31)}],
+      [{x:x(0.10),y:y(0.74)},{x:x(0.24),y:y(0.61)},{x:x(0.36),y:y(0.71)},{x:x(0.52),y:y(0.56)},{x:x(0.68),y:y(0.68)},{x:x(0.84),y:y(0.54)},{x:x(0.94),y:y(0.63)}],
+      [{x:x(0.16),y:y(0.05)},{x:x(0.26),y:y(0.18)},{x:x(0.19),y:y(0.34)},{x:x(0.30),y:y(0.49)},{x:x(0.23),y:y(0.67)},{x:x(0.34),y:y(0.84)},{x:x(0.28),y:y(0.95)}],
+      [{x:x(0.76),y:y(0.08)},{x:x(0.65),y:y(0.21)},{x:x(0.74),y:y(0.36)},{x:x(0.61),y:y(0.52)},{x:x(0.70),y:y(0.67)},{x:x(0.56),y:y(0.84)},{x:x(0.66),y:y(0.96)}],
+      [{x:x(0.05),y:y(0.46)},{x:x(0.19),y:y(0.40)},{x:x(0.33),y:y(0.51)},{x:x(0.47),y:y(0.44)},{x:x(0.62),y:y(0.53)},{x:x(0.77),y:y(0.47)},{x:x(0.95),y:y(0.58)}]
+    ];
+    state.roads = roads.map((pts, idx) => ({ id: idx, points: pts, length: roadLength(pts) }));
+  }
+
+  function createMirrors() {
+    state.mirrors = [];
+    if (!state.roads.length) createRoads();
+    for (let i = 0; i < MIRROR_COUNT; i++) {
+      const road = state.roads[i % state.roads.length];
+      const offset = road.length * ((i + 0.5) / MIRROR_COUNT) + rand(-40, 40);
+      const p = pointOnRoad(road, offset);
+      state.mirrors.push({
+        roadId: road.id,
+        s: offset,
+        speed: rand(70, 120) * (i % 2 ? 1 : -1),
+        x: p.x,
+        y: p.y,
+        len: 50 + (i % 3) * 9,
+        angle: p.angle + (i % 2 ? 0.18 : -0.18),
+        shimmer: Math.random() * 6.28,
+        wobbleAmp: rand(0.05, 0.22),
+        wobbleSpeed: rand(0.7, 1.6),
+        phase: Math.random() * 6.28
+      });
+    }
+  }
+
+  function resetRound() {
+    round += 1;
+    createRoads();
+    createPlayers();
+    createMirrors();
+    state.shots = []; state.sparks = []; state.ripples = [];
+    winnerTimer = 0;
+    flash('Round ' + round);
+    renderHud();
+  }
+
+  function flash(txt) { message = txt; messageT = 2; }
+  function livePlayers() { return state.players.filter(p => p.alive); }
+
+  function segmentIntersectRay(px, py, dx, dy, x1, y1, x2, y2) {
+    const sx = x2 - x1, sy = y2 - y1;
+    const den = dx * sy - dy * sx;
+    if (Math.abs(den) < 1e-7) return null;
+    const qx = x1 - px, qy = y1 - py;
+    const t = (qx * sy - qy * sx) / den;
+    const u = (qx * dy - qy * dx) / den;
+    if (t > 0.0001 && u >= 0 && u <= 1) return { t, u, x: px + dx * t, y: py + dy * t };
+    return null;
+  }
+  function rayCircleHit(px, py, dx, dy, cx, cy, r) {
+    const ox = px - cx, oy = py - cy;
+    const b = 2 * (ox * dx + oy * dy);
+    const c = ox * ox + oy * oy - r * r;
+    const disc = b * b - 4 * c;
+    if (disc < 0) return null;
+    const s = Math.sqrt(disc), t1 = (-b - s) / 2, t2 = (-b + s) / 2;
+    if (t1 > 0.0001) return t1; if (t2 > 0.0001) return t2; return null;
+  }
+
+  function tracePath(owner, angle, energy = 1, forPreview = false) {
+    const dir = angleToVec(angle);
+    let px = owner.x + dir.x * (owner.radius + 4), py = owner.y + dir.y * (owner.radius + 4);
+    let dx = dir.x, dy = dir.y;
+    const segments = [];
+    const ignored = new Set([owner.id]);
+    let bounces = 0, remEnergy = energy;
+
+    while (remEnergy > 0.08 && bounces <= MAX_BOUNCES) {
+      let closest = null, type = 'wall', obj = null;
+      const walls = [
+        { x1: 0, y1: 0, x2: W, y2: 0, nx: 0, ny: 1 },
+        { x1: W, y1: 0, x2: W, y2: H, nx: -1, ny: 0 },
+        { x1: W, y1: H, x2: 0, y2: H, nx: 0, ny: -1 },
+        { x1: 0, y1: H, x2: 0, y2: 0, nx: 1, ny: 0 }
+      ];
+      for (const wall of walls) {
+        const hit = segmentIntersectRay(px, py, dx, dy, wall.x1, wall.y1, wall.x2, wall.y2);
+        if (hit && (!closest || hit.t < closest.t)) { closest = { ...hit, nx: wall.nx, ny: wall.ny }; type = 'wall'; obj = wall; }
+      }
+
+      for (const m of state.mirrors) {
+        const ex = Math.cos(m.angle) * m.len * 0.5, ey = Math.sin(m.angle) * m.len * 0.5;
+        const hit = segmentIntersectRay(px, py, dx, dy, m.x - ex, m.y - ey, m.x + ex, m.y + ey);
+        if (hit && (!closest || hit.t < closest.t)) {
+          const tx = Math.cos(m.angle), ty = Math.sin(m.angle); const nx = -ty, ny = tx;
+          closest = { ...hit, nx, ny, tx, ty }; type = 'mirror'; obj = m;
+        }
+      }
+      if (bounces > 0) {
+        for (const p of state.players) {
+          if (!p.alive || ignored.has(p.id)) continue;
+          const t = rayCircleHit(px, py, dx, dy, p.x, p.y, p.radius + 1.5);
+          if (t && (!closest || t < closest.t)) { closest = { t, x: px + dx * t, y: py + dy * t }; type = 'player'; obj = p; }
+        }
+      }
+      if (!closest) break;
+
+      segments.push({ x1: px, y1: py, x2: closest.x, y2: closest.y, energy: remEnergy, kind: type, bounces });
+      if (type === 'player') {
+        const damage = damageFromPath(remEnergy, bounces);
+        return { hit: obj, segments, energy: remEnergy, score: damage + remEnergy * 0.35, angle, bounces, damage };
+      }
+      if (type === 'wall') {
+        return { hit: null, segments, energy: 0, score: 0, angle, bounces, damage: 0 };
+      }
+      if (type === 'mirror') {
+        const inc = Math.abs(dx * closest.nx + dy * closest.ny);
+        if (inc < 0.2) {
+          px = closest.x + dx * 1.5; py = closest.y + dy * 1.5; remEnergy *= 0.93; bounces += 1; continue;
+        }
+        const refl = reflect(dx, dy, closest.nx, closest.ny);
+        const n = norm(refl.x, refl.y); dx = n.x; dy = n.y;
+        px = closest.x + dx * 1.5; py = closest.y + dy * 1.5;
+        remEnergy = Math.min(1.8, remEnergy * 0.82 + 0.16);
+        bounces += 1;
+      }
+    }
+    return { hit: null, segments, energy: 0, score: 0, angle, bounces, damage: 0 };
+  }
+
+  function findBestLock(player) {
+    const aliveTargets = state.players.filter(p => p.alive && p.id !== player.id);
+    if (!aliveTargets.length) return null;
+    let best = null;
+    const candidateAngles = [];
+    for (const t of aliveTargets) {
+      candidateAngles.push(Math.atan2(t.y - player.y, t.x - player.x));
+    }
+    for (let i = 0; i < 18; i++) candidateAngles.push(i * Math.PI * 2 / 18 + (player.id * 0.07));
+    candidateAngles.push(player.aim, player.aim + 0.18, player.aim - 0.18);
+
+    for (const ang of candidateAngles) {
+      const result = tracePath(player, ang, 1, true);
+      if (!result.hit) continue;
+      const target = result.hit;
+      const d = Math.hypot(target.x - player.x, target.y - player.y);
+      const closeness = 1 / Math.max(120, d);
+      const score = result.score + closeness * 16;
+      if (!best || score > best.score) best = { targetId: target.id, angle: ang, score, preview: result.segments, energy: result.energy, targetName: target.name };
+    }
+    if (!best) {
+      const t = aliveTargets.reduce((a, b) => dist2(player.x, player.y, a.x, a.y) < dist2(player.x, player.y, b.x, b.y) ? a : b);
+      const ang = Math.atan2(t.y - player.y, t.x - player.x);
+      best = { targetId: t.id, angle: ang, score: 0.12, preview: [], energy: 0.15, targetName: t.name, bounces: 0, damage: 0, hit: null };
+    }
+    return best;
+  }
+
+  function fireCurrentLock(player) {
+    if (!player.alive || player.cooldown > 0 || player.charge < 0.18) return;
+    const lock = player.lock || findBestLock(player);
+    if (!lock) return;
+    player.aim = lock.angle;
+    player.cooldown = player.isHuman ? 0.25 : rand(0.35, 0.75);
+    const energy = clamp(0.35 + player.charge * 0.9, 0.35, 1.25);
+    player.charge = Math.max(0, player.charge - 0.58);
+    player.shots += 1;
+    const dir = angleToVec(lock.angle);
+    const ox = player.x + dir.x * (player.radius + 4), oy = player.y + dir.y * (player.radius + 4);
+    state.ripples.push({ x: player.x, y: player.y, r: 8, life: 0.36, maxLife: 0.36, color: player.color });
+    spawnProjectile({ ownerId: player.id, x: ox, y: oy, dx: dir.x, dy: dir.y, energy, color: player.color, age: 0, trail: [], bounces: 0 });
+  }
+
+  function spawnProjectile(p) { state.shots.push(p); }
+
+  function impactSpark(x, y, color, count = 8, soft = false) {
+    for (let i = 0; i < count; i++) {
+      const a = rand(0, Math.PI * 2), sp = rand(25, soft ? 70 : 110);
+      state.sparks.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, size: rand(1.2, soft ? 2.8 : 3.8), color, life: rand(0.18, 0.42), maxLife: 0.42 });
+    }
+  }
+
+  function damagePlayer(target, shooterId, energy, bounces, x, y) {
+    const shooter = state.players[shooterId];
+    const dmg = damageFromPath(energy, bounces);
+    target.hits += dmg;
+    impactSpark(x, y, target.color, 10 + dmg);
+    state.ripples.push({ x: target.x, y: target.y, r: target.radius + 3, life: 0.28, maxLife: 0.28, color: target.color });
+    if (target.hits >= HITS_TO_KILL && target.alive) {
+      target.alive = false;
+      if (shooter) shooter.kills += 1;
+      impactSpark(target.x, target.y, '#ffffff', 18);
+      flash(target.name + ' down');
+    }
+    renderHud();
+  }
+
+  function shatterProjectile(proj, x, y, nx, ny) {
+    const nextBounces = (proj.bounces || 0) + 1;
+    const refl = reflect(proj.dx, proj.dy, nx, ny);
+    const r1 = norm(refl.x, refl.y);
+    const t1 = norm(proj.dx, proj.dy);
+    const s1 = rotate(r1.x, r1.y, rand(-0.34, 0.34));
+    const baseEnergy = proj.energy * 0.45;
+    spawnProjectile({ ownerId: proj.ownerId, x: x + r1.x * 2, y: y + r1.y * 2, dx: r1.x, dy: r1.y, energy: baseEnergy, color: proj.color, age: 0, trail: [], bounces: nextBounces });
+    spawnProjectile({ ownerId: proj.ownerId, x: x + t1.x * 2, y: y + t1.y * 2, dx: t1.x, dy: t1.y, energy: baseEnergy * 0.82, color: proj.color, age: 0, trail: [], bounces: nextBounces });
+    spawnProjectile({ ownerId: proj.ownerId, x: x + s1.x * 2, y: y + s1.y * 2, dx: s1.x, dy: s1.y, energy: baseEnergy * 0.62, color: proj.color, age: 0, trail: [], bounces: nextBounces });
+    impactSpark(x, y, '#ffffff', 12);
+  }
+
+  function updateProjectiles(dt) {
+    const remaining = [];
+    for (const p of state.shots) {
+      let lifeKeep = true;
+      let step = dt * 520;
+      while (step > 0.5 && lifeKeep) {
+        const move = Math.min(22, step);
+        step -= move;
+        const nx = p.x + p.dx * move, ny = p.y + p.dy * move;
+        p.trail.push({ x1: p.x, y1: p.y, x2: nx, y2: ny, energy: p.energy });
+        if (p.trail.length > 10) p.trail.shift();
+
+        let hitHandled = false;
+        const shooter = state.players[p.ownerId];
+        if ((p.bounces || 0) > 0) {
+          for (const target of state.players) {
+            if (!target.alive || target.id === p.ownerId) continue;
+            if (dist2(nx, ny, target.x, target.y) <= (target.radius + 2) * (target.radius + 2)) {
+              damagePlayer(target, p.ownerId, p.energy, p.bounces || 0, nx, ny);
+              lifeKeep = false; hitHandled = true; break;
+            }
+          }
+        }
+        if (hitHandled) break;
+
+        for (const m of state.mirrors) {
+          const ex = Math.cos(m.angle) * m.len * 0.5, ey = Math.sin(m.angle) * m.len * 0.5;
+          const hit = segmentIntersectRay(p.x, p.y, p.dx, p.dy, m.x - ex, m.y - ey, m.x + ex, m.y + ey);
+          if (hit && hit.t <= move + 0.8) {
+            const tx = Math.cos(m.angle), ty = Math.sin(m.angle), mx = -ty, my = tx;
+            const incidence = Math.abs(p.dx * mx + p.dy * my);
+            m.shimmer += 1.1;
+            const hx = hit.x, hy = hit.y;
+            if (incidence > 0.38 && incidence < 0.6 && p.energy > 0.32) {
+              shatterProjectile(p, hx, hy, mx, my);
+              lifeKeep = false; hitHandled = true; break;
+            } else if (incidence < 0.18) {
+              p.bounces = (p.bounces || 0) + 1; p.x = hx + p.dx * 2; p.y = hy + p.dy * 2; p.energy = Math.min(1.8, p.energy * 0.93 + 0.1);
+              impactSpark(hx, hy, '#ffffff', 4, true);
+              hitHandled = true; break;
+            } else {
+              const refl = reflect(p.dx, p.dy, mx, my), rn = norm(refl.x, refl.y);
+              p.bounces = (p.bounces || 0) + 1; p.dx = rn.x; p.dy = rn.y; p.x = hx + p.dx * 2; p.y = hy + p.dy * 2; p.energy = Math.min(1.8, p.energy * 0.82 + 0.14);
+              impactSpark(hx, hy, '#ffffff', 7);
+              hitHandled = true; break;
+            }
+          }
+        }
+        if (hitHandled) continue;
+
+        p.x = nx; p.y = ny; p.energy *= 0.996; p.age += dt;
+        if (p.x < 0 || p.x > W || p.y < 0 || p.y > H || p.energy < 0.08 || p.age > 4.5) lifeKeep = false;
+      }
+      if (lifeKeep) remaining.push(p);
+    }
+    state.shots = remaining;
+  }
+
+  function updateLocks(dt) {
+    for (const p of state.players) {
+      if (!p.alive) continue;
+      p.cooldown = Math.max(0, p.cooldown - dt);
+      p.charge = clamp(p.charge + (p.isHuman ? 0.26 : 0.22) * dt, 0, 1);
+      p.think -= dt;
+      if (p.think <= 0) {
+        p.lock = findBestLock(p);
+        p.think = p.isHuman ? 0.06 : rand(0.08, 0.18);
+      }
+      if (p.lock) {
+        let da = ((p.lock.angle - p.aim + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+        const turn = p.isHuman ? 2.4 : 2.2;
+        da = clamp(da, -turn * dt, turn * dt);
+        p.aim += da;
+      }
+      if (!p.isHuman && p.lock && p.cooldown <= 0) {
+        const trigger = p.lock.score > 0.2 && p.charge > 0.35 && Math.abs((((p.lock.angle - p.aim) + Math.PI * 3) % (Math.PI * 2)) - Math.PI) < 0.2;
+        if (trigger) fireCurrentLock(p);
+      }
+      p.pulse += dt;
+    }
+  }
+
+  function updateMirrors(dt, t) {
+    if (!state.roads.length) return;
+    state.mirrors.forEach((m, i) => {
+      const road = state.roads[m.roadId % state.roads.length];
+      m.s += m.speed * dt;
+      const p = pointOnRoad(road, m.s);
+      m.x = p.x;
+      m.y = p.y;
+      m.angle = p.angle + Math.sin(t * m.wobbleSpeed + m.phase + i * 0.3) * m.wobbleAmp;
+      m.shimmer += dt * 2.2;
+    });
+  }
+
+  function update(dt, t) {
+    if (!started || paused) return;
+    updateMirrors(dt, t);
+    updateLocks(dt);
+    updateProjectiles(dt);
+
+    state.sparks.forEach(s => { s.life -= dt; s.x += s.vx * dt; s.y += s.vy * dt; s.vx *= 1 - dt * 2.8; s.vy *= 1 - dt * 2.8; });
+    state.sparks = state.sparks.filter(s => s.life > 0);
+    state.ripples.forEach(r => { r.life -= dt; r.r += dt * 82; });
+    state.ripples = state.ripples.filter(r => r.life > 0);
+    if (messageT > 0) messageT -= dt;
+
+    const alive = livePlayers();
+    if (alive.length <= 1) {
+      winnerTimer += dt;
+      if (winnerTimer > 0.3 && alive.length === 1) flash(alive[0].name + ' wins the round');
+      if (winnerTimer > 2.6) resetRound();
+    } else winnerTimer = 0;
+
+    renderHud();
+  }
+
+  function renderHud() {
+    const me = state.players[0];
+    const alive = livePlayers().length;
+    quickStats.innerHTML = `<div><span>Round</span> <b>${Math.max(1, round)}</b></div><div><span>Alive</span> <b>${alive}/${PLAYER_COUNT}</b></div><div><span>Hits</span> <b>${me ? me.hits : 0}/${HITS_TO_KILL}</b></div><div><span>Kills</span> <b>${me ? me.kills : 0}</b></div>`;
+    if (me) {
+      chargeFill.style.width = (me.charge * 100).toFixed(1) + '%';
+      const lockName = me.lock ? me.lock.targetName : 'none';
+      const quality = me.lock ? Math.round(clamp(me.lock.score * 100, 0, 100)) : 0;
+      const damage = me.lock ? me.lock.damage : 0;
+      const bounces = me.lock ? me.lock.bounces : 0;
+      chargeLabel.textContent = `Charge ${Math.round(me.charge * 100)}% · Lock ${lockName} · ${bounces}R · ${damage} dmg · Quality ${quality}%`;
+      legendText.textContent = me.lock && me.lock.preview.length
+        ? `Direct hits are disabled. Thin traces show each alive player's best reflected hit. Your current lock on ${lockName} uses ${bounces} reflection${bounces === 1 ? '' : 's'} for ${damage} damage. More reflections power up the shot.`
+        : 'Direct hits are disabled. The turret is scanning for a reflected route; wait for a thin preview line before firing.';
+    }
+    playerGrid.innerHTML = state.players.map(p => {
+      const hp = Math.max(0, 100 - (p.hits / HITS_TO_KILL) * 100);
+      const best = p.lock ? `${p.lock.bounces}R → ${p.lock.targetName} · ${p.lock.damage} dmg` : 'No reflected line';
+      return `<div class="pbox"><div class="pname"><span style="color:${p.color}">${p.name}</span><span>${p.alive ? 'Alive' : 'Down'}</span></div><div class="pmeta">Shots ${p.shots} · Kills ${p.kills} · Damage taken ${p.hits}/${HITS_TO_KILL}</div><div class="pmeta">${best}</div><div class="bar"><div class="fill" style="width:${hp}%; background:${p.color}"></div></div></div>`;
+    }).join('');
+  }
+
+  function drawBackground() {
+    const grad = ctx.createLinearGradient(0, 0, 0, H); grad.addColorStop(0, '#0b2238'); grad.addColorStop(1, '#07121d');
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+    for (const s of state.stars) {
+      const tw = 0.55 + 0.45 * Math.sin(s.a); ctx.beginPath(); ctx.arc(s.x, s.y, s.r * tw, 0, Math.PI * 2); ctx.fillStyle = `rgba(210,240,255,${0.18 + tw * 0.35})`; ctx.fill();
+      s.a += 0.01 * s.tw;
+    }
+    const b = arena();
+    ctx.save();
+    ctx.strokeStyle = 'rgba(165,234,255,0.16)'; ctx.lineWidth = 2;
+    roundRect(b.left, b.top, b.right - b.left, b.bottom - b.top, 24); ctx.stroke();
+    ctx.strokeStyle = 'rgba(165,234,255,0.055)'; ctx.lineWidth = 1;
+    const grid = 46;
+    for (let x = b.left + 10; x < b.right; x += grid) { ctx.beginPath(); ctx.moveTo(x, b.top + 8); ctx.lineTo(x, b.bottom - 8); ctx.stroke(); }
+    for (let y = b.top + 10; y < b.bottom; y += grid) { ctx.beginPath(); ctx.moveTo(b.left + 8, y); ctx.lineTo(b.right - 8, y); ctx.stroke(); }
+    ctx.restore();
+  }
+
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
+
+  function drawMirrors() {
+    for (const m of state.mirrors) {
+      const ex = Math.cos(m.angle) * m.len * 0.5, ey = Math.sin(m.angle) * m.len * 0.5;
+      const sh = 0.55 + 0.45 * Math.sin(m.shimmer);
+      ctx.save();
+      ctx.strokeStyle = `rgba(255,255,255,${0.32 + sh * 0.22})`; ctx.lineWidth = 7; ctx.shadowBlur = 18; ctx.shadowColor = 'rgba(180,240,255,0.42)';
+      ctx.beginPath(); ctx.moveTo(m.x - ex, m.y - ey); ctx.lineTo(m.x + ex, m.y + ey); ctx.stroke();
+      ctx.strokeStyle = `rgba(160,235,255,${0.72 + sh * 0.18})`; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(m.x - ex, m.y - ey); ctx.lineTo(m.x + ex, m.y + ey); ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  function drawLockPreview(player) {
+    if (!player || !player.alive || !player.lock || !player.lock.preview.length) return;
+    ctx.save();
+    ctx.setLineDash(player.isHuman ? [6, 6] : [4, 8]);
+    const quality = clamp(player.lock.score, 0.15, 1.2);
+    for (const seg of player.lock.preview) {
+      const alpha = player.isHuman ? 0.75 : 0.26;
+      ctx.strokeStyle = rgbaHex(player.color, alpha * (0.55 + quality * 0.08));
+      ctx.lineWidth = player.isHuman ? 1.8 : 0.95;
+      ctx.beginPath(); ctx.moveTo(seg.x1, seg.y1); ctx.lineTo(seg.x2, seg.y2); ctx.stroke();
+    }
+    const last = player.lock.preview[player.lock.preview.length - 1];
+    if (last) {
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(8,15,27,0.7)';
+      ctx.strokeStyle = rgbaHex(player.color, player.isHuman ? 0.8 : 0.35);
+      ctx.lineWidth = 1;
+      ctx.font = player.isHuman ? '700 11px Inter, system-ui, sans-serif' : '600 10px Inter, system-ui, sans-serif';
+      const label = `${player.lock.bounces}R/${player.lock.damage}`;
+      const tx = last.x2 + 8, ty = last.y2 - 8, w = ctx.measureText(label).width + 10;
+      roundRect(tx - 4, ty - 12, w, 18, 8); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = player.isHuman ? 'rgba(235,250,255,0.95)' : 'rgba(220,238,245,0.78)';
+      ctx.fillText(label, tx + 1, ty + 1);
+    }
+    ctx.restore();
+  }
+
+  function drawShots() {
+    ctx.save(); ctx.lineCap = 'round';
+    for (const p of state.shots) {
+      for (let i = 0; i < p.trail.length; i++) {
+        const seg = p.trail[i], a = (i + 1) / p.trail.length * clamp(seg.energy, 0.18, 1);
+        ctx.strokeStyle = rgbaHex(state.players[p.ownerId]?.color || '#7cf3ff', 0.18 * a); ctx.lineWidth = 10; ctx.shadowBlur = 20; ctx.shadowColor = rgbaHex(state.players[p.ownerId]?.color || '#7cf3ff', 0.3 * a);
+        ctx.beginPath(); ctx.moveTo(seg.x1, seg.y1); ctx.lineTo(seg.x2, seg.y2); ctx.stroke();
+        ctx.strokeStyle = rgbaHex(state.players[p.ownerId]?.color || '#7cf3ff', 0.95 * a); ctx.lineWidth = 2.3;
+        ctx.beginPath(); ctx.moveTo(seg.x1, seg.y1); ctx.lineTo(seg.x2, seg.y2); ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawPlayers() {
+    for (const p of state.players) {
+      const alpha = p.alive ? 1 : 0.18, pulse = 0.5 + 0.5 * Math.sin(p.pulse * 2);
+      if (p.alive) {
+        const dir = angleToVec(p.aim), aimLen = 28 + pulse * 6;
+        const qual = p.lock ? clamp(p.lock.score, 0.14, 1.1) : 0.14;
+        ctx.save();
+        ctx.strokeStyle = rgbaHex(p.color, p.isHuman ? 0.9 : 0.46); ctx.lineWidth = p.isHuman ? 2.8 : 2; ctx.shadowBlur = p.isHuman ? 18 : 12; ctx.shadowColor = rgbaHex(p.color, 0.55);
+        ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x + dir.x * aimLen, p.y + dir.y * aimLen); ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1.1;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.radius + 8 + qual * 8, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
+      }
+      ctx.save(); ctx.shadowBlur = 20; ctx.shadowColor = rgbaHex(p.color, 0.45 * alpha);
+      ctx.fillStyle = rgbaHex(p.color, 0.22 * alpha); ctx.beginPath(); ctx.arc(p.x, p.y, p.radius + 10 + pulse * 1.6, 0, Math.PI * 2); ctx.fill();
+      const radial = ctx.createRadialGradient(p.x - 4, p.y - 5, 1, p.x, p.y, p.radius + 4);
+      radial.addColorStop(0, rgbaHex('#ffffff', 0.9 * alpha)); radial.addColorStop(0.2, rgbaHex(p.color, 0.95 * alpha)); radial.addColorStop(1, rgbaHex(shade(p.color, -35), 0.85 * alpha));
+      ctx.fillStyle = radial; ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = p.isHuman ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.42)'; ctx.lineWidth = p.isHuman ? 2.2 : 1.2;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.radius + (p.isHuman ? 3.1 : 1.5), 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+      if (!p.alive) {
+        ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,0.16)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(p.x - 10, p.y - 10); ctx.lineTo(p.x + 10, p.y + 10); ctx.moveTo(p.x + 10, p.y - 10); ctx.lineTo(p.x - 10, p.y + 10); ctx.stroke(); ctx.restore();
+      }
+    }
+  }
+
+  function drawFx() {
+    for (const r of state.ripples) { const a = r.life / r.maxLife; ctx.save(); ctx.strokeStyle = rgbaHex(r.color, a * 0.6); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
+    for (const s of state.sparks) { const a = s.life / s.maxLife; ctx.fillStyle = rgbaHex(s.color, a); ctx.beginPath(); ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2); ctx.fill(); }
+  }
+
+  function drawCenterText() {
+    if (messageT <= 0) return;
+    const a = Math.min(1, messageT / 0.3, messageT / 2);
+    ctx.save(); ctx.textAlign = 'center'; ctx.font = '800 30px Inter, system-ui, sans-serif';
+    ctx.fillStyle = `rgba(255,255,255,${0.08 * a})`; ctx.fillText(message, W / 2, H / 2 + 1);
+    ctx.fillStyle = `rgba(231,247,255,${0.92 * a})`; ctx.shadowBlur = 18; ctx.shadowColor = 'rgba(121,240,255,0.38)'; ctx.fillText(message, W / 2, H / 2); ctx.restore();
+  }
+
+  function draw() {
+    drawBackground();
+    drawMirrors();
+    state.players.forEach(drawLockPreview);
+    drawShots();
+    drawPlayers();
+    drawFx();
+    drawCenterText();
+  }
+
+  function rgbaHex(hex, a) {
+    const h = hex.replace('#', ''); const n = parseInt(h, 16); const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255; return `rgba(${r},${g},${b},${a})`;
+  }
+  function shade(hex, amt) {
+    const h = hex.replace('#', ''); let r = parseInt(h.slice(0,2),16)+amt, g = parseInt(h.slice(2,4),16)+amt, b = parseInt(h.slice(4,6),16)+amt;
+    r = clamp(Math.round(r), 0, 255); g = clamp(Math.round(g), 0, 255); b = clamp(Math.round(b), 0, 255);
+    return '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0')).join('');
+  }
+
+  function gameLoop(ts) {
+    const t = ts * 0.001; const dt = Math.min(0.033, t - lastT || 0.016); lastT = t;
+    update(dt, t); draw(); requestAnimationFrame(gameLoop);
+  }
+
+  function toggleStats(force) {
+    const open = force !== undefined ? force : !statsPanel.classList.contains('open');
+    statsPanel.classList.toggle('open', open);
+    statsBtn.textContent = open ? 'Hide Stats' : 'Show Stats';
+  }
+
+  function handleFire() {
+    if (!started || paused) return;
+    const me = state.players[0];
+    if (me && me.alive) fireCurrentLock(me);
+  }
+
+  canvas.addEventListener('pointerdown', (e) => {
+    const tag = (e.target && e.target.tagName || '').toLowerCase();
+    if (tag === 'button') return;
+    handleFire();
+  });
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); if (!started) startGame(); else handleFire(); }
+    if (e.key.toLowerCase() === 'p') { paused = !paused; pauseBtn.textContent = paused ? 'Resume' : 'Pause'; }
+    if (e.key.toLowerCase() === 'r') { if (!started) startGame(); else resetRound(); }
+    if (e.key.toLowerCase() === 's') toggleStats();
+  });
+  statsBtn.addEventListener('click', () => toggleStats());
+  closeStatsBtn.addEventListener('click', () => toggleStats(false));
+  pauseBtn.addEventListener('click', () => { paused = !paused; pauseBtn.textContent = paused ? 'Resume' : 'Pause'; });
+  restartBtn.addEventListener('click', () => { if (!started) startGame(); else resetRound(); });
+  startBtn.addEventListener('click', startGame);
+  dismissBtn.addEventListener('click', () => overlay.style.display = 'none');
+
+  function startGame() { started = true; overlay.style.display = 'none'; if (round === 0) resetRound(); }
+
+  resize(); createStars(); createPlayers(); createMirrors(); renderHud(); requestAnimationFrame(gameLoop);
+  window.addEventListener('resize', () => { resize(); renderHud(); });
+})();
+</script>
+</body>
+</html>
