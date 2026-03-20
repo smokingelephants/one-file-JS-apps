@@ -7,6 +7,8 @@ javascript games and apps in one file
 
 ## 
 # Mirror Ricochet Arena
+playable at https://solofilegames.itch.io/ricochet 
+
 
 A single-file HTML/JavaScript top-down arena game where players can only damage opponents through **reflected shots**. Turrets auto-scan for the best ricochet route, mirrors move along hidden fixed paths, and **more reflections mean more damage**.
 
